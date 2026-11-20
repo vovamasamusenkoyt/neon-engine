@@ -52,9 +52,11 @@ mod desktop {
                     let pos = [position.x as f32, position.y as f32];
                     self.cursor_pos = Vec2::new(pos[0], pos[1]);
                     self.engine.cursor_pos = Some(pos);
+                    self.engine.on_cursor_move(self.cursor_pos);
                 }
                 WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Left, .. } => {
                     let action = self.engine.on_touch(self.cursor_pos, true);
+                    log::info!("Mouse click at {:?} -> action: {:?}", self.cursor_pos, action);
                     if action == MenuAction::Quit {
                         event_loop.exit();
                     }

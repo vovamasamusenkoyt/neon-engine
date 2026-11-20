@@ -34,6 +34,7 @@ pub struct EngineRenderer {
     pub menu_quad_ibuf: Subbuffer<[u32]>,
     pub mouse_allocator: SubbufferAllocator,
     pub menu_descriptor_sets: [Arc<DescriptorSet>; 3],
+    pub options_descriptor_sets: [Arc<DescriptorSet>; 4],
     pub mouse_descriptor_set: Arc<DescriptorSet>,
     pub previous_frame_end: Option<Box<dyn GpuFuture>>,
     pub recreate_needed: bool,
@@ -154,6 +155,26 @@ impl EngineRenderer {
             set_layout.clone(),
             include_bytes!("../../../assets/generated/menu_2.png"),
         )?;
+        let opt_0 = create_texture_from_png(
+            &context,
+            set_layout.clone(),
+            include_bytes!("../../../assets/generated/options_0.png"),
+        )?;
+        let opt_1 = create_texture_from_png(
+            &context,
+            set_layout.clone(),
+            include_bytes!("../../../assets/generated/options_1.png"),
+        )?;
+        let opt_2 = create_texture_from_png(
+            &context,
+            set_layout.clone(),
+            include_bytes!("../../../assets/generated/options_2.png"),
+        )?;
+        let opt_3 = create_texture_from_png(
+            &context,
+            set_layout.clone(),
+            include_bytes!("../../../assets/generated/options_3.png"),
+        )?;
         let mouse_set = create_texture_from_png(
             &context,
             set_layout,
@@ -173,6 +194,7 @@ impl EngineRenderer {
             menu_quad_ibuf,
             mouse_allocator,
             menu_descriptor_sets: [set_0, set_1, set_2],
+            options_descriptor_sets: [opt_0, opt_1, opt_2, opt_3],
             mouse_descriptor_set: mouse_set,
             previous_frame_end,
             recreate_needed: false,
@@ -195,9 +217,9 @@ impl EngineRenderer {
     ) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(text) = hud_text {
             let (v_overlay, i_overlay) = build_text_overlay(text);
-            self.draw_frame_with_overlay(mvp, false, 0, None, &v_overlay, &i_overlay)
+            self.draw_frame_with_overlay(mvp, false, false, 0, None, &v_overlay, &i_overlay)
         } else {
-            self.draw_frame_with_overlay(mvp, false, 0, None, &[], &[])
+            self.draw_frame_with_overlay(mvp, false, false, 0, None, &[], &[])
         }
     }
 
@@ -205,6 +227,7 @@ impl EngineRenderer {
         &mut self,
         mvp: Mat4,
         menu_active: bool,
+        is_options_page: bool,
         selected_option: usize,
         cursor_pos: Option<[f32; 2]>,
         overlay_verts: &[Vertex3D],
@@ -277,8 +300,13 @@ impl EngineRenderer {
 
         if menu_active {
             // Draw Authentic 1:1 reVC Menu Quad
-            let opt_idx = selected_option.min(2);
-            let desc_set = self.menu_descriptor_sets[opt_idx].clone();
+            let desc_set = if is_options_page {
+                let opt_idx = selected_option.min(3);
+                self.options_descriptor_sets[opt_idx].clone()
+            } else {
+                let opt_idx = selected_option.min(2);
+                self.menu_descriptor_sets[opt_idx].clone()
+            };
 
             builder.bind_pipeline_graphics(self.pipelines.textured_pipeline.clone())?;
             builder.bind_descriptor_sets(

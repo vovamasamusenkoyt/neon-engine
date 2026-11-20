@@ -90,6 +90,14 @@ impl EngineApp {
         MenuAction::None
     }
 
+    pub fn on_cursor_move(&mut self, pos: Vec2) {
+        if !self.menu.is_active {
+            return;
+        }
+        let win_size = Vec2::new(self.window_extent[0] as f32, self.window_extent[1] as f32);
+        self.menu.on_cursor_move(pos, win_size);
+    }
+
     pub fn on_touch(&mut self, pos: Vec2, pressed: bool) -> MenuAction {
         if !pressed || !self.menu.is_active {
             return MenuAction::None;
@@ -111,9 +119,11 @@ impl EngineApp {
         let mvp = proj * view * model;
 
         if self.menu.is_active {
+            let is_options = self.menu.current_page == MenuPage::Options;
             renderer.draw_frame_with_overlay(
                 mvp,
                 true,
+                is_options,
                 self.menu.selected_option,
                 self.cursor_pos,
                 &[],

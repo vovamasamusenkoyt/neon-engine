@@ -88,27 +88,27 @@ impl CMenuManager {
         match page {
             // MENUPAGE_START_MENU = 29 (Frontend.cpp / MenuScreens.cpp:252)
             MenuPage::StartMenu => {
-                let start_y = 175.0;
-                let line_height = 36.0;
+                let start_y = 180.0;
+                let line_height = 40.0;
 
                 self.items.push(MenuItem {
                     label: String::from("НАЧАТЬ ИГРУ"),
                     action: MenuAction::NewGame,
-                    x: 320.0,
+                    x: 290.0,
                     y: start_y,
                     is_centered: true,
                 });
                 self.items.push(MenuItem {
                     label: String::from("НАСТРОЙКИ"),
                     action: MenuAction::ChangeMenu(MenuPage::Options),
-                    x: 320.0,
+                    x: 290.0,
                     y: start_y + line_height,
                     is_centered: true,
                 });
                 self.items.push(MenuItem {
                     label: String::from("ВЫЙТИ ИЗ ИГРЫ"),
                     action: MenuAction::Quit,
-                    x: 320.0,
+                    x: 290.0,
                     y: start_y + line_height * 2.0,
                     is_centered: true,
                 });
@@ -151,28 +151,35 @@ impl CMenuManager {
 
             // MENUPAGE_OPTIONS = 27 (MenuScreens.cpp:235)
             MenuPage::Options => {
-                let start_y = 132.0;
-                let line_height = 29.0;
+                let start_y = 153.0;
+                let step = 36.6;
 
                 self.items.push(MenuItem {
-                    label: String::from("DISPLAY SETUP"),
+                    label: String::from("НАСТРОЙКИ ЭКРАНА"),
                     action: MenuAction::ChangeMenu(MenuPage::DisplaySettings),
-                    x: 320.0,
+                    x: 290.0,
                     y: start_y,
                     is_centered: true,
                 });
                 self.items.push(MenuItem {
-                    label: String::from("AUDIO SETUP"),
+                    label: String::from("НАСТРОЙКИ ЗВУКА"),
                     action: MenuAction::ChangeMenu(MenuPage::SoundSettings),
-                    x: 320.0,
-                    y: start_y + line_height,
+                    x: 290.0,
+                    y: start_y + step,
                     is_centered: true,
                 });
                 self.items.push(MenuItem {
-                    label: String::from("BACK"),
+                    label: String::from("УПРАВЛЕНИЕ"),
+                    action: MenuAction::None,
+                    x: 290.0,
+                    y: start_y + step * 2.0,
+                    is_centered: true,
+                });
+                self.items.push(MenuItem {
+                    label: String::from("НАЗАД"),
                     action: MenuAction::GoBack,
-                    x: 320.0,
-                    y: start_y + line_height * 2.0,
+                    x: 290.0,
+                    y: start_y + step * 3.0,
                     is_centered: true,
                 });
             }
@@ -299,8 +306,32 @@ impl CMenuManager {
         action
     }
 
+    pub fn on_cursor_move(&mut self, screen_pos: Vec2, window_size: Vec2) {
+        if window_size.x <= 0.0 || window_size.y <= 0.0 || !self.is_active {
+            return;
+        }
+
+        let virt_x = (screen_pos.x / window_size.x) * SCREEN_WIDTH;
+        let virt_y = (screen_pos.y / window_size.y) * SCREEN_HEIGHT;
+
+        for (idx, item) in self.items.iter().enumerate() {
+            let (left, right) = if item.is_centered {
+                (item.x - 200.0, item.x + 200.0)
+            } else {
+                (item.x - 20.0, item.x + 320.0)
+            };
+            let top = item.y - 20.0;
+            let bottom = item.y + 20.0;
+
+            if virt_x >= left && virt_x <= right && virt_y >= top && virt_y <= bottom {
+                self.selected_option = idx;
+                break;
+            }
+        }
+    }
+
     pub fn handle_touch(&mut self, screen_pos: Vec2, window_size: Vec2) -> MenuAction {
-        if window_size.x <= 0.0 || window_size.y <= 0.0 {
+        if window_size.x <= 0.0 || window_size.y <= 0.0 || !self.is_active {
             return MenuAction::None;
         }
 
@@ -309,12 +340,12 @@ impl CMenuManager {
 
         for (idx, item) in self.items.iter().enumerate() {
             let (left, right) = if item.is_centered {
-                (item.x - 140.0, item.x + 140.0)
+                (item.x - 200.0, item.x + 200.0)
             } else {
-                (item.x - 10.0, item.x + 280.0)
+                (item.x - 20.0, item.x + 320.0)
             };
-            let top = item.y - 4.0;
-            let bottom = item.y + 28.0;
+            let top = item.y - 20.0;
+            let bottom = item.y + 20.0;
 
             if virt_x >= left && virt_x <= right && virt_y >= top && virt_y <= bottom {
                 self.selected_option = idx;
@@ -323,5 +354,36 @@ impl CMenuManager {
         }
 
         MenuAction::None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_menu_hover_and_touch() {
+        let mut menu = CMenuManager::new();
+        let win_size = Vec2::new(1280.0, 720.0);
+
+        // Hover over НАСТРОЙКИ (center approx 580, 330 in 720p)
+        menu.on_cursor_move(Vec2::new(580.0, 330.0), win_size);
+        assert_eq!(menu.selected_option, 1, "Should hover on Option 1 (НАСТРОЙКИ)");
+
+        // Hover over ВЫЙТИ ИЗ ИГРЫ (center approx 580, 390 in 720p)
+        menu.on_cursor_move(Vec2::new(580.0, 390.0), win_size);
+        assert_eq!(menu.selected_option, 2, "Should hover on Option 2 (ВЫЙТИ ИЗ ИГРЫ)");
+
+        // Click on НАЧАТЬ ИГРУ (center approx 580, 270 in 720p)
+        let action = menu.handle_touch(Vec2::new(580.0, 270.0), win_size);
+        assert_eq!(action, MenuAction::NewGame, "Click should activate NewGame");
+        assert_eq!(menu.is_active, false, "Menu should be deactivated on NewGame");
+
+        // Tablet test (2560x1600)
+        let mut tablet_menu = CMenuManager::new();
+        let tablet_size = Vec2::new(2560.0, 1600.0);
+        let action_opt = tablet_menu.handle_touch(Vec2::new(1160.0, 733.0), tablet_size);
+        assert_eq!(action_opt, MenuAction::ChangeMenu(MenuPage::Options));
+        assert_eq!(tablet_menu.current_page, MenuPage::Options);
     }
 }
