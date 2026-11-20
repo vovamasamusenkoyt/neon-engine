@@ -1,15 +1,13 @@
-pub struct RenderConfig {
-    pub enable_validation: bool,
-    pub width: u32,
-    pub height: u32,
-}
+pub mod context;
+pub mod overlay;
+pub mod pipeline;
+pub mod renderer;
+pub mod shaders;
+pub mod swapchain;
+pub mod vertex;
 
-impl Default for RenderConfig {
-    fn default() -> Self {
-        Self {
-            enable_validation: cfg!(debug_assertions),
-            width: 1280,
-            height: 720,
-        }
-    }
-}
+pub use context::VulkanContext;
+pub use pipeline::RenderPipelines;
+pub use renderer::EngineRenderer;
+pub use swapchain::SwapchainTarget;
+pub use vertex::Vertex3D;

@@ -8,4 +8,8 @@ license.workspace = true
 platform = { path = "../platform" }
 engine-core = { path = "../engine-core" }
 asset-loader = { path = "../asset-loader" }
-vulkano = "0.34"
+vulkano = { version = "0.35", default-features = false, features = ["macros"] }
+vulkano-shaders = "0.35"
+glam = "0.29"
+log = "0.4"
+raw-window-handle = "0.6"

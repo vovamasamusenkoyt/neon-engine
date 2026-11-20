@@ -1,0 +1,37 @@
+[package]
+name = "neon-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["lib", "cdylib"]
+
+[[bin]]
+name = "neon-app"
+path = "src/main.rs"
+
+[dependencies]
+platform = { path = "../platform" }
+engine-core = { path = "../engine-core" }
+engine-render = { path = "../engine-render" }
+asset-loader = { path = "../asset-loader" }
+vulkano = { version = "0.35", default-features = false, features = ["macros"] }
+glam = "0.29"
+log = "0.4"
+raw-window-handle = "0.6"
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+winit = { version = "0.30", features = ["rwh_06"] }
+env_logger = "0.11"
+
+[target.'cfg(target_os = "android")'.dependencies]
+android-activity = { version = "0.6", features = ["native-activity"] }
+android_logger = "0.14"
+
+[package.metadata.android]
+package = "com.neon.engine"
+app_name = "NeonEngine"
+min_sdk_version = 26
+target_sdk_version = 35
+build_targets = ["aarch64-linux-android"]

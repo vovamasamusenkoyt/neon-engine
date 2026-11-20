@@ -2,11 +2,10 @@
 resolver = "2"
 members = [
     "crates/platform",
-    "crates/platform-desktop",
-    "crates/platform-android",
     "crates/engine-core",
     "crates/engine-render",
     "crates/asset-loader",
+    "crates/neon-app",
 ]
 
 [workspace.package]
