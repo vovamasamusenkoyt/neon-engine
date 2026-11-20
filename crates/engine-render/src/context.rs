@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use vulkano::command_buffer::allocator::StandardCommandBufferAllocator;
+use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
 use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
 use vulkano::device::{Device, DeviceCreateInfo, DeviceExtensions, Queue, QueueCreateInfo, QueueFlags};
 use vulkano::format::{Format, FormatFeatures};
@@ -16,6 +17,7 @@ pub struct VulkanContext {
     pub queue_family_index: u32,
     pub memory_allocator: Arc<StandardMemoryAllocator>,
     pub cb_allocator: Arc<StandardCommandBufferAllocator>,
+    pub desc_allocator: Arc<StandardDescriptorSetAllocator>,
     pub depth_format: Format,
 }
 
@@ -88,6 +90,10 @@ impl VulkanContext {
             device.clone(),
             Default::default(),
         ));
+        let desc_allocator = Arc::new(StandardDescriptorSetAllocator::new(
+            device.clone(),
+            Default::default(),
+        ));
 
         Ok(Self {
             instance,
@@ -97,6 +103,7 @@ impl VulkanContext {
             queue_family_index,
             memory_allocator,
             cb_allocator,
+            desc_allocator,
             depth_format,
         })
     }

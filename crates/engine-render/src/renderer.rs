@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use glam::Mat4;
 use vulkano::buffer::allocator::{SubbufferAllocator, SubbufferAllocatorCreateInfo};
 use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer};
@@ -5,9 +6,11 @@ use vulkano::command_buffer::{
     AutoCommandBufferBuilder, CommandBufferUsage, RenderPassBeginInfo, SubpassBeginInfo,
     SubpassContents,
 };
+use vulkano::descriptor_set::DescriptorSet;
 use vulkano::format::{ClearValue, Format};
 use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter};
 use vulkano::pipeline::graphics::viewport::Viewport;
+use vulkano::pipeline::PipelineBindPoint;
 use vulkano::render_pass::Subpass;
 use vulkano::swapchain::{self, SwapchainPresentInfo};
 use vulkano::sync::GpuFuture;
@@ -17,7 +20,8 @@ use crate::overlay::build_text_overlay;
 use crate::pipeline::RenderPipelines;
 use crate::shaders::vs;
 use crate::swapchain::SwapchainTarget;
-use crate::vertex::Vertex3D;
+use crate::texture::create_texture_from_png;
+use crate::vertex::{Vertex2D, Vertex3D};
 
 pub struct EngineRenderer {
     pub context: VulkanContext,
@@ -26,6 +30,11 @@ pub struct EngineRenderer {
     pub cube_vbuf: Subbuffer<[Vertex3D]>,
     pub cube_ibuf: Subbuffer<[u32]>,
     pub overlay_allocator: SubbufferAllocator,
+    pub menu_quad_vbuf: Subbuffer<[Vertex2D]>,
+    pub menu_quad_ibuf: Subbuffer<[u32]>,
+    pub mouse_allocator: SubbufferAllocator,
+    pub menu_descriptor_sets: [Arc<DescriptorSet>; 3],
+    pub mouse_descriptor_set: Arc<DescriptorSet>,
     pub previous_frame_end: Option<Box<dyn GpuFuture>>,
     pub recreate_needed: bool,
 }
@@ -77,6 +86,80 @@ impl EngineRenderer {
             },
         );
 
+        let menu_verts = [
+            Vertex2D::new([-1.0, -1.0], [0.0, 0.0]),
+            Vertex2D::new([ 1.0, -1.0], [1.0, 0.0]),
+            Vertex2D::new([ 1.0,  1.0], [1.0, 1.0]),
+            Vertex2D::new([-1.0,  1.0], [0.0, 1.0]),
+        ];
+        let menu_inds = [0u32, 1, 2, 0, 2, 3];
+
+        let menu_quad_vbuf = Buffer::from_iter(
+            context.memory_allocator.clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::VERTEX_BUFFER,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                ..Default::default()
+            },
+            menu_verts,
+        )?;
+
+        let menu_quad_ibuf = Buffer::from_iter(
+            context.memory_allocator.clone(),
+            BufferCreateInfo {
+                usage: BufferUsage::INDEX_BUFFER,
+                ..Default::default()
+            },
+            AllocationCreateInfo {
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                ..Default::default()
+            },
+            menu_inds,
+        )?;
+
+        let mouse_allocator = SubbufferAllocator::new(
+            context.memory_allocator.clone(),
+            SubbufferAllocatorCreateInfo {
+                buffer_usage: BufferUsage::VERTEX_BUFFER | BufferUsage::INDEX_BUFFER,
+                memory_type_filter: MemoryTypeFilter::PREFER_DEVICE
+                    | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
+                ..Default::default()
+            },
+        );
+
+        let set_layout = pipelines
+            .textured_layout
+            .set_layouts()
+            .get(0)
+            .ok_or("no set 0 in textured_layout")?
+            .clone();
+
+        let set_0 = create_texture_from_png(
+            &context,
+            set_layout.clone(),
+            include_bytes!("../../../assets/generated/menu_0.png"),
+        )?;
+        let set_1 = create_texture_from_png(
+            &context,
+            set_layout.clone(),
+            include_bytes!("../../../assets/generated/menu_1.png"),
+        )?;
+        let set_2 = create_texture_from_png(
+            &context,
+            set_layout.clone(),
+            include_bytes!("../../../assets/generated/menu_2.png"),
+        )?;
+        let mouse_set = create_texture_from_png(
+            &context,
+            set_layout,
+            include_bytes!("../../../assets/mouse.png"),
+        )?;
+
         let previous_frame_end = Some(vulkano::sync::now(context.device.clone()).boxed());
 
         Ok(Self {
@@ -86,6 +169,11 @@ impl EngineRenderer {
             cube_vbuf,
             cube_ibuf,
             overlay_allocator,
+            menu_quad_vbuf,
+            menu_quad_ibuf,
+            mouse_allocator,
+            menu_descriptor_sets: [set_0, set_1, set_2],
+            mouse_descriptor_set: mouse_set,
             previous_frame_end,
             recreate_needed: false,
         })
@@ -107,15 +195,18 @@ impl EngineRenderer {
     ) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(text) = hud_text {
             let (v_overlay, i_overlay) = build_text_overlay(text);
-            self.draw_frame_with_overlay(mvp, &v_overlay, &i_overlay)
+            self.draw_frame_with_overlay(mvp, false, 0, None, &v_overlay, &i_overlay)
         } else {
-            self.draw_frame_with_overlay(mvp, &[], &[])
+            self.draw_frame_with_overlay(mvp, false, 0, None, &[], &[])
         }
     }
 
     pub fn draw_frame_with_overlay(
         &mut self,
         mvp: Mat4,
+        menu_active: bool,
+        selected_option: usize,
+        cursor_pos: Option<[f32; 2]>,
         overlay_verts: &[Vertex3D],
         overlay_inds: &[u32],
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -161,7 +252,7 @@ impl EngineRenderer {
             .begin_render_pass(
                 RenderPassBeginInfo {
                     clear_values: vec![
-                        Some([0.05, 0.06, 0.08, 1.0].into()),
+                        Some([0.0, 0.0, 0.0, 1.0].into()),
                         Some(depth_clear),
                     ],
                     ..RenderPassBeginInfo::framebuffer(
@@ -184,21 +275,81 @@ impl EngineRenderer {
                 .collect(),
             )?;
 
-        // Draw 3D Scene with Depth Test
-        builder.bind_pipeline_graphics(self.pipelines.cube_pipeline.clone())?;
-        let cube_push = vs::PushConstants {
-            mvp: mvp.to_cols_array_2d(),
-        };
-        builder
-            .push_constants(self.pipelines.pipeline_layout.clone(), 0, cube_push)?
-            .bind_vertex_buffers(0, self.cube_vbuf.clone())?
-            .bind_index_buffer(self.cube_ibuf.clone())?;
+        if menu_active {
+            // Draw Authentic 1:1 reVC Menu Quad
+            let opt_idx = selected_option.min(2);
+            let desc_set = self.menu_descriptor_sets[opt_idx].clone();
 
-        unsafe {
-            builder.draw_indexed(36, 1, 0, 0, 0)?;
+            builder.bind_pipeline_graphics(self.pipelines.textured_pipeline.clone())?;
+            builder.bind_descriptor_sets(
+                PipelineBindPoint::Graphics,
+                self.pipelines.textured_layout.clone(),
+                0,
+                desc_set,
+            )?;
+            builder
+                .bind_vertex_buffers(0, self.menu_quad_vbuf.clone())?
+                .bind_index_buffer(self.menu_quad_ibuf.clone())?;
+
+            unsafe {
+                builder.draw_indexed(6, 1, 0, 0, 0)?;
+            }
+
+            // Draw Authentic Cursor if present
+            if let Some(pos) = cursor_pos {
+                let win_w = extent[0] as f32;
+                let win_h = extent[1] as f32;
+                let ndc_x = (pos[0] / win_w) * 2.0 - 1.0;
+                let ndc_y = (pos[1] / win_h) * 2.0 - 1.0;
+                let c_w = (32.0 / win_w) * 2.0;
+                let c_h = (32.0 / win_h) * 2.0;
+
+                let c_verts = [
+                    Vertex2D::new([ndc_x, ndc_y], [0.0, 0.0]),
+                    Vertex2D::new([ndc_x + c_w, ndc_y], [1.0, 0.0]),
+                    Vertex2D::new([ndc_x + c_w, ndc_y + c_h], [1.0, 1.0]),
+                    Vertex2D::new([ndc_x, ndc_y + c_h], [0.0, 1.0]),
+                ];
+                let c_inds = [0u32, 1, 2, 0, 2, 3];
+
+                if let (Ok(vb), Ok(ib)) = (
+                    self.mouse_allocator.allocate_slice::<Vertex2D>(4),
+                    self.mouse_allocator.allocate_slice::<u32>(6),
+                ) {
+                    vb.write()?.copy_from_slice(&c_verts);
+                    ib.write()?.copy_from_slice(&c_inds);
+
+                    builder.bind_descriptor_sets(
+                        PipelineBindPoint::Graphics,
+                        self.pipelines.textured_layout.clone(),
+                        0,
+                        self.mouse_descriptor_set.clone(),
+                    )?;
+                    builder
+                        .bind_vertex_buffers(0, vb)?
+                        .bind_index_buffer(ib)?;
+                    unsafe {
+                        builder.draw_indexed(6, 1, 0, 0, 0)?;
+                    }
+                }
+            }
+        } else {
+            // Draw 3D Scene with Depth Test
+            builder.bind_pipeline_graphics(self.pipelines.cube_pipeline.clone())?;
+            let cube_push = vs::PushConstants {
+                mvp: mvp.to_cols_array_2d(),
+            };
+            builder
+                .push_constants(self.pipelines.pipeline_layout.clone(), 0, cube_push)?
+                .bind_vertex_buffers(0, self.cube_vbuf.clone())?
+                .bind_index_buffer(self.cube_ibuf.clone())?;
+
+            unsafe {
+                builder.draw_indexed(36, 1, 0, 0, 0)?;
+            }
         }
 
-        // Draw 2D HUD / Menu overlay
+        // Draw 2D HUD overlay (FPS / hints) on top
         if !overlay_inds.is_empty() {
             if let (Ok(vb), Ok(ib)) = (
                 self.overlay_allocator.allocate_slice::<Vertex3D>(overlay_verts.len() as u64),
@@ -248,51 +399,33 @@ impl EngineRenderer {
                 self.recreate_needed = true;
                 self.previous_frame_end = Some(vulkano::sync::now(self.context.device.clone()).boxed());
             }
-            Err(e) => {
-                log::error!("Flush error: {:?}", e);
-                self.previous_frame_end = Some(vulkano::sync::now(self.context.device.clone()).boxed());
-            }
+            Err(e) => return Err(e.into()),
         }
 
         Ok(())
     }
 }
 
-pub fn create_cube_mesh() -> (Vec<Vertex3D>, Vec<u32>) {
-    let mut vertices = Vec::new();
-    let mut indices = Vec::new();
-
-    let faces = [
-        // Front (+Z): Cyan
-        ([-1.0, -1.0, 1.0], [1.0, -1.0, 1.0], [1.0, 1.0, 1.0], [-1.0, 1.0, 1.0], [0.0, 0.95, 0.95]),
-        // Back (-Z): Magenta
-        ([1.0, -1.0, -1.0], [-1.0, -1.0, -1.0], [-1.0, 1.0, -1.0], [1.0, 1.0, -1.0], [0.95, 0.05, 0.95]),
-        // Top (+Y): Yellow
-        ([-1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, -1.0], [-1.0, 1.0, -1.0], [0.95, 0.95, 0.1]),
-        // Bottom (-Y): Royal Blue
-        ([-1.0, -1.0, -1.0], [1.0, -1.0, -1.0], [1.0, -1.0, 1.0], [-1.0, -1.0, 1.0], [0.1, 0.35, 0.95]),
-        // Right (+X): Bright Orange
-        ([1.0, -1.0, 1.0], [1.0, -1.0, -1.0], [1.0, 1.0, -1.0], [1.0, 1.0, 1.0], [1.0, 0.55, 0.05]),
-        // Left (-X): Lime Green
-        ([-1.0, -1.0, -1.0], [-1.0, -1.0, 1.0], [-1.0, 1.0, 1.0], [-1.0, 1.0, -1.0], [0.2, 0.95, 0.25]),
+fn create_cube_mesh() -> (Vec<Vertex3D>, Vec<u32>) {
+    let vertices = vec![
+        Vertex3D::new([-0.5, -0.5, 0.5], [1.0, 0.2, 0.2]),
+        Vertex3D::new([0.5, -0.5, 0.5], [0.2, 1.0, 0.2]),
+        Vertex3D::new([0.5, 0.5, 0.5], [0.2, 0.2, 1.0]),
+        Vertex3D::new([-0.5, 0.5, 0.5], [1.0, 1.0, 0.2]),
+        Vertex3D::new([-0.5, -0.5, -0.5], [1.0, 0.2, 1.0]),
+        Vertex3D::new([0.5, -0.5, -0.5], [0.2, 1.0, 1.0]),
+        Vertex3D::new([0.5, 0.5, -0.5], [1.0, 1.0, 1.0]),
+        Vertex3D::new([-0.5, 0.5, -0.5], [0.5, 0.5, 0.5]),
     ];
 
-    for (p0, p1, p2, p3, c) in faces {
-        let base_idx = vertices.len() as u32;
-        vertices.push(Vertex3D::new(p0, c));
-        vertices.push(Vertex3D::new(p1, c));
-        vertices.push(Vertex3D::new(p2, c));
-        vertices.push(Vertex3D::new(p3, c));
-
-        indices.extend_from_slice(&[
-            base_idx,
-            base_idx + 1,
-            base_idx + 2,
-            base_idx,
-            base_idx + 2,
-            base_idx + 3,
-        ]);
-    }
+    let indices = vec![
+        0, 1, 2, 2, 3, 0,
+        1, 5, 6, 6, 2, 1,
+        5, 4, 7, 7, 6, 5,
+        4, 0, 3, 3, 7, 4,
+        3, 2, 6, 6, 7, 3,
+        4, 5, 1, 1, 0, 4,
+    ];
 
     (vertices, indices)
 }

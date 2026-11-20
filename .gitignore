@@ -3,3 +3,11 @@ Cargo.lock
 *.apk
 *.idsig
 jniLibs/
+assets/*screenshot*.png
+assets/*crop*.png
+assets/*preview*.png
+assets/*comparison*.png
+assets/*grid*.png
+assets/*strip*.png
+assets/ref_*.png
+assets/__pycache__/

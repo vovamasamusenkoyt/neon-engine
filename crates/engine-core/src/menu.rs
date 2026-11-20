@@ -88,35 +88,28 @@ impl CMenuManager {
         match page {
             // MENUPAGE_START_MENU = 29 (Frontend.cpp / MenuScreens.cpp:252)
             MenuPage::StartMenu => {
-                let start_y = 170.0;
-                let line_height = 29.0;
+                let start_y = 175.0;
+                let line_height = 36.0;
 
                 self.items.push(MenuItem {
-                    label: String::from("START GAME"),
-                    action: MenuAction::ChangeMenu(MenuPage::NewGame),
+                    label: String::from("НАЧАТЬ ИГРУ"),
+                    action: MenuAction::NewGame,
                     x: 320.0,
                     y: start_y,
                     is_centered: true,
                 });
                 self.items.push(MenuItem {
-                    label: String::from("OPTIONS"),
+                    label: String::from("НАСТРОЙКИ"),
                     action: MenuAction::ChangeMenu(MenuPage::Options),
                     x: 320.0,
                     y: start_y + line_height,
                     is_centered: true,
                 });
                 self.items.push(MenuItem {
-                    label: String::from("STATS"),
-                    action: MenuAction::ChangeMenu(MenuPage::Stats),
-                    x: 320.0,
-                    y: start_y + line_height * 2.0,
-                    is_centered: true,
-                });
-                self.items.push(MenuItem {
-                    label: String::from("QUIT GAME"),
+                    label: String::from("ВЫЙТИ ИЗ ИГРЫ"),
                     action: MenuAction::Quit,
                     x: 320.0,
-                    y: start_y + line_height * 3.0,
+                    y: start_y + line_height * 2.0,
                     is_centered: true,
                 });
             }

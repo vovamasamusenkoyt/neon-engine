@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use glam::{Mat4, Vec2, Vec3};
 use engine_core::{CMenuManager, Camera, MenuAction, MenuPage};
-use engine_render::{build_menu_overlay, EngineRenderer, SwapchainTarget, VulkanContext};
+use engine_render::{EngineRenderer, SwapchainTarget, VulkanContext};
 use vulkano::swapchain::Surface;
 
 pub struct EngineApp {
@@ -14,6 +14,7 @@ pub struct EngineApp {
     pub last_fps_time: Instant,
     pub current_fps_text: String,
     pub window_extent: [u32; 2],
+    pub cursor_pos: Option<[f32; 2]>,
 }
 
 impl Default for EngineApp {
@@ -33,6 +34,7 @@ impl EngineApp {
             last_fps_time: Instant::now(),
             current_fps_text: String::from("FPS: 0000"),
             window_extent: [1280, 720],
+            cursor_pos: None,
         }
     }
 
@@ -109,8 +111,14 @@ impl EngineApp {
         let mvp = proj * view * model;
 
         if self.menu.is_active {
-            let (v_menu, i_menu) = build_menu_overlay(&self.menu, &self.current_fps_text);
-            renderer.draw_frame_with_overlay(mvp, &v_menu, &i_menu)?;
+            renderer.draw_frame_with_overlay(
+                mvp,
+                true,
+                self.menu.selected_option,
+                self.cursor_pos,
+                &[],
+                &[],
+            )?;
         } else {
             renderer.draw_frame(mvp, Some(&self.current_fps_text))?;
         }

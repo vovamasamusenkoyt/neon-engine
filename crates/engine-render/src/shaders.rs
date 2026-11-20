@@ -34,3 +34,42 @@ pub mod fs {
         "
     }
 }
+
+pub mod vs_tex {
+    vulkano_shaders::shader! {
+        ty: "vertex",
+        src: r"
+            #version 450
+            layout(location = 0) in vec2 position;
+            layout(location = 1) in vec2 tex_coords;
+
+            layout(location = 0) out vec2 v_tex_coords;
+
+            void main() {
+                gl_Position = vec4(position, 0.0, 1.0);
+                v_tex_coords = tex_coords;
+            }
+        "
+    }
+}
+
+pub mod fs_tex {
+    vulkano_shaders::shader! {
+        ty: "fragment",
+        src: r"
+            #version 450
+            layout(location = 0) in vec2 v_tex_coords;
+            layout(location = 0) out vec4 f_color;
+
+            layout(set = 0, binding = 0) uniform sampler2D u_texture;
+
+            void main() {
+                vec4 col = texture(u_texture, v_tex_coords);
+                if (col.a < 0.02) {
+                    discard;
+                }
+                f_color = col;
+            }
+        "
+    }
+}

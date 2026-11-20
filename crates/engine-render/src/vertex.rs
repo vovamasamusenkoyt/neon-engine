@@ -15,3 +15,18 @@ impl Vertex3D {
         Self { position, color }
     }
 }
+
+#[repr(C)]
+#[derive(BufferContents, Vertex, Clone, Copy, Debug)]
+pub struct Vertex2D {
+    #[format(R32G32_SFLOAT)]
+    pub position: [f32; 2],
+    #[format(R32G32_SFLOAT)]
+    pub tex_coords: [f32; 2],
+}
+
+impl Vertex2D {
+    pub const fn new(position: [f32; 2], tex_coords: [f32; 2]) -> Self {
+        Self { position, tex_coords }
+    }
+}

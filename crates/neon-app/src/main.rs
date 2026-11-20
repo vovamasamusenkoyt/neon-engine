@@ -49,7 +49,9 @@ mod desktop {
                     self.engine.resize([size.width, size.height]);
                 }
                 WindowEvent::CursorMoved { position, .. } => {
-                    self.cursor_pos = Vec2::new(position.x as f32, position.y as f32);
+                    let pos = [position.x as f32, position.y as f32];
+                    self.cursor_pos = Vec2::new(pos[0], pos[1]);
+                    self.engine.cursor_pos = Some(pos);
                 }
                 WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Left, .. } => {
                     let action = self.engine.on_touch(self.cursor_pos, true);
