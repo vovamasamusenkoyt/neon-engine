@@ -1,0 +1,11 @@
+[package]
+name = "engine-render"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+platform = { path = "../platform" }
+engine-core = { path = "../engine-core" }
+asset-loader = { path = "../asset-loader" }
+vulkano = "0.34"

@@ -1,0 +1,12 @@
+/target
+**/*.rs.bk
+*.apk
+*.idsig
+*.keystore
+local.properties
+.DS_Store
+*.log
+apk_staging/
+jniLibs/
+base.apk
+vulkan_test_aligned.apk

@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/platform",
+    "crates/platform-desktop",
+    "crates/platform-android",
+    "crates/engine-core",
+    "crates/engine-render",
+    "crates/asset-loader",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["dj"]
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true
