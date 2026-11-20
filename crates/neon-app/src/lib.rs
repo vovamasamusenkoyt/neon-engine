@@ -1,17 +1,19 @@
 use std::sync::Arc;
 use std::time::Instant;
-use glam::{Mat4, Vec3};
-use engine_core::Camera;
-use engine_render::{EngineRenderer, SwapchainTarget, VulkanContext};
+use glam::{Mat4, Vec2, Vec3};
+use engine_core::{CMenuManager, Camera, MenuAction, MenuPage};
+use engine_render::{build_menu_overlay, EngineRenderer, SwapchainTarget, VulkanContext};
 use vulkano::swapchain::Surface;
 
 pub struct EngineApp {
     pub renderer: Option<EngineRenderer>,
     pub camera: Camera,
+    pub menu: CMenuManager,
     pub start_time: Instant,
     pub frame_count: u64,
     pub last_fps_time: Instant,
     pub current_fps_text: String,
+    pub window_extent: [u32; 2],
 }
 
 impl Default for EngineApp {
@@ -25,10 +27,12 @@ impl EngineApp {
         Self {
             renderer: None,
             camera: Camera::new(16.0 / 10.0),
+            menu: CMenuManager::new(),
             start_time: Instant::now(),
             frame_count: 0,
             last_fps_time: Instant::now(),
             current_fps_text: String::from("FPS: 0000"),
+            window_extent: [1280, 720],
         }
     }
 
@@ -49,10 +53,47 @@ impl EngineApp {
         if extent[0] == 0 || extent[1] == 0 {
             return;
         }
+        self.window_extent = extent;
         self.camera.aspect = extent[0] as f32 / extent[1] as f32;
         if let Some(renderer) = &mut self.renderer {
             renderer.resize(extent);
         }
+    }
+
+    pub fn on_key(&mut self, key_code: u32, pressed: bool) -> MenuAction {
+        if !pressed {
+            return MenuAction::None;
+        }
+
+        // Key mapping: Up (38), Down (40), Enter (13), Escape (27)
+        match key_code {
+            38 => { // Up Arrow
+                self.menu.nav_up();
+            }
+            40 => { // Down Arrow
+                self.menu.nav_down();
+            }
+            13 => { // Enter
+                return self.menu.activate();
+            }
+            27 => { // Escape
+                if self.menu.current_page != MenuPage::StartMenu {
+                    self.menu.set_page(MenuPage::StartMenu);
+                } else {
+                    self.menu.is_active = !self.menu.is_active;
+                }
+            }
+            _ => {}
+        }
+        MenuAction::None
+    }
+
+    pub fn on_touch(&mut self, pos: Vec2, pressed: bool) -> MenuAction {
+        if !pressed || !self.menu.is_active {
+            return MenuAction::None;
+        }
+        let win_size = Vec2::new(self.window_extent[0] as f32, self.window_extent[1] as f32);
+        self.menu.handle_touch(pos, win_size)
     }
 
     pub fn render_frame(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -67,7 +108,12 @@ impl EngineApp {
 
         let mvp = proj * view * model;
 
-        renderer.draw_frame(mvp, Some(&self.current_fps_text))?;
+        if self.menu.is_active {
+            let (v_menu, i_menu) = build_menu_overlay(&self.menu, &self.current_fps_text);
+            renderer.draw_frame_with_overlay(mvp, &v_menu, &i_menu)?;
+        } else {
+            renderer.draw_frame(mvp, Some(&self.current_fps_text))?;
+        }
 
         self.frame_count += 1;
         let now = Instant::now();
@@ -75,7 +121,6 @@ impl EngineApp {
         if duration.as_secs_f32() >= 0.5 {
             let fps = self.frame_count as f32 / duration.as_secs_f32();
             self.current_fps_text = format!("FPS: {:.0}", fps);
-            log::info!(">>> Frame: {:>5.2} ms | {} <<<", 1000.0 / fps, self.current_fps_text);
             self.frame_count = 0;
             self.last_fps_time = now;
         }
@@ -156,9 +201,23 @@ fn android_main(app: android_activity::AndroidApp) {
             }
         });
 
-        // Drain input events to avoid system ANR
+        // Drain input events and handle touches for menu
         if let Ok(mut iter) = app.input_events_iter() {
-            while iter.next(|_event| android_activity::InputStatus::Handled) {}
+            while iter.next(|event| {
+                if let android_activity::input::InputEvent::MotionEvent(motion) = event {
+                    let action = motion.action();
+                    if action == android_activity::input::MotionAction::Down {
+                        if let Some(pointer) = motion.pointers().next() {
+                            let pos = Vec2::new(pointer.x(), pointer.y());
+                            let menu_action = engine_app.on_touch(pos, true);
+                            if menu_action == MenuAction::Quit {
+                                running = false;
+                            }
+                        }
+                    }
+                }
+                android_activity::InputStatus::Handled
+            }) {}
         }
 
         if surface_created {

@@ -1,26 +1,30 @@
 #[cfg(not(target_os = "android"))]
 mod desktop {
     use std::sync::Arc;
+    use engine_core::MenuAction;
     use engine_render::VulkanContext;
+    use glam::Vec2;
     use neon_app::EngineApp;
     use vulkano::swapchain::Surface;
     use winit::application::ApplicationHandler;
     use winit::dpi::PhysicalSize;
-    use winit::event::WindowEvent;
+    use winit::event::{ElementState, MouseButton, WindowEvent};
     use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+    use winit::keyboard::{Key, NamedKey};
     use winit::window::{Window, WindowId};
 
     struct DesktopApp {
         context: Option<VulkanContext>,
         window: Option<Arc<Window>>,
         engine: EngineApp,
+        cursor_pos: Vec2,
     }
 
     impl ApplicationHandler for DesktopApp {
         fn resumed(&mut self, event_loop: &ActiveEventLoop) {
             if self.window.is_none() {
                 let win_attrs = Window::default_attributes()
-                    .with_title("Neon Engine - Desktop")
+                    .with_title("Neon Engine // reVC Frontend")
                     .with_inner_size(PhysicalSize::new(1280, 720));
 
                 let window = Arc::new(event_loop.create_window(win_attrs).expect("failed to create window"));
@@ -43,6 +47,29 @@ mod desktop {
                 }
                 WindowEvent::Resized(size) => {
                     self.engine.resize([size.width, size.height]);
+                }
+                WindowEvent::CursorMoved { position, .. } => {
+                    self.cursor_pos = Vec2::new(position.x as f32, position.y as f32);
+                }
+                WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Left, .. } => {
+                    let action = self.engine.on_touch(self.cursor_pos, true);
+                    if action == MenuAction::Quit {
+                        event_loop.exit();
+                    }
+                }
+                WindowEvent::KeyboardInput { event: key_event, .. } => {
+                    if key_event.state == ElementState::Pressed {
+                        let action = match key_event.logical_key {
+                            Key::Named(NamedKey::ArrowUp) => self.engine.on_key(38, true),
+                            Key::Named(NamedKey::ArrowDown) => self.engine.on_key(40, true),
+                            Key::Named(NamedKey::Enter) => self.engine.on_key(13, true),
+                            Key::Named(NamedKey::Escape) => self.engine.on_key(27, true),
+                            _ => MenuAction::None,
+                        };
+                        if action == MenuAction::Quit {
+                            event_loop.exit();
+                        }
+                    }
                 }
                 WindowEvent::RedrawRequested => {
                     let _ = self.engine.render_frame();
@@ -69,6 +96,7 @@ mod desktop {
             context: None,
             window: None,
             engine: EngineApp::new(),
+            cursor_pos: Vec2::ZERO,
         };
 
         event_loop.run_app(&mut app)?;

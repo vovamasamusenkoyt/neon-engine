@@ -105,6 +105,20 @@ impl EngineRenderer {
         mvp: Mat4,
         hud_text: Option<&str>,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(text) = hud_text {
+            let (v_overlay, i_overlay) = build_text_overlay(text);
+            self.draw_frame_with_overlay(mvp, &v_overlay, &i_overlay)
+        } else {
+            self.draw_frame_with_overlay(mvp, &[], &[])
+        }
+    }
+
+    pub fn draw_frame_with_overlay(
+        &mut self,
+        mvp: Mat4,
+        overlay_verts: &[Vertex3D],
+        overlay_inds: &[u32],
+    ) -> Result<(), Box<dyn std::error::Error>> {
         if self.recreate_needed {
             self.recreate_needed = false;
             let extent = self.target.swapchain.image_extent();
@@ -170,7 +184,7 @@ impl EngineRenderer {
                 .collect(),
             )?;
 
-        // Draw 3D Cube with Depth Test
+        // Draw 3D Scene with Depth Test
         builder.bind_pipeline_graphics(self.pipelines.cube_pipeline.clone())?;
         let cube_push = vs::PushConstants {
             mvp: mvp.to_cols_array_2d(),
@@ -184,29 +198,26 @@ impl EngineRenderer {
             builder.draw_indexed(36, 1, 0, 0, 0)?;
         }
 
-        // Draw HUD overlay
-        if let Some(text) = hud_text {
-            let (v_overlay, i_overlay) = build_text_overlay(text);
-            if !i_overlay.is_empty() {
-                if let (Ok(vb), Ok(ib)) = (
-                    self.overlay_allocator.allocate_slice::<Vertex3D>(v_overlay.len() as u64),
-                    self.overlay_allocator.allocate_slice::<u32>(i_overlay.len() as u64),
-                ) {
-                    vb.write()?.copy_from_slice(&v_overlay);
-                    ib.write()?.copy_from_slice(&i_overlay);
+        // Draw 2D HUD / Menu overlay
+        if !overlay_inds.is_empty() {
+            if let (Ok(vb), Ok(ib)) = (
+                self.overlay_allocator.allocate_slice::<Vertex3D>(overlay_verts.len() as u64),
+                self.overlay_allocator.allocate_slice::<u32>(overlay_inds.len() as u64),
+            ) {
+                vb.write()?.copy_from_slice(overlay_verts);
+                ib.write()?.copy_from_slice(overlay_inds);
 
-                    builder.bind_pipeline_graphics(self.pipelines.overlay_pipeline.clone())?;
-                    let overlay_push = vs::PushConstants {
-                        mvp: Mat4::IDENTITY.to_cols_array_2d(),
-                    };
-                    builder
-                        .push_constants(self.pipelines.pipeline_layout.clone(), 0, overlay_push)?
-                        .bind_vertex_buffers(0, vb)?
-                        .bind_index_buffer(ib)?;
+                builder.bind_pipeline_graphics(self.pipelines.overlay_pipeline.clone())?;
+                let overlay_push = vs::PushConstants {
+                    mvp: Mat4::IDENTITY.to_cols_array_2d(),
+                };
+                builder
+                    .push_constants(self.pipelines.pipeline_layout.clone(), 0, overlay_push)?
+                    .bind_vertex_buffers(0, vb)?
+                    .bind_index_buffer(ib)?;
 
-                    unsafe {
-                        builder.draw_indexed(i_overlay.len() as u32, 1, 0, 0, 0)?;
-                    }
+                unsafe {
+                    builder.draw_indexed(overlay_inds.len() as u32, 1, 0, 0, 0)?;
                 }
             }
         }

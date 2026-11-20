@@ -1,4 +1,7 @@
+pub mod menu;
+
 pub use glam::*;
+pub use menu::*;
 
 pub struct Camera {
     pub position: Vec3,
